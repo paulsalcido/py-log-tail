@@ -133,10 +133,16 @@ class logtail(object):
         # For this run, we would need to check the file inode on each run, and when it
         # changes, reset the current read to zero.
         totalread = 0
+        fileino = -1
+        lastfileino = -1
         while ( 1 ):
             files = self._fileglob()
             if ( len(files) > 1 ):
                 ValueError("Option singlefile set and more than one file returned by glob.");
+            fileino = os.stat(files[0])[1];
+            if ( fileino != lastfileino ):
+                lastfileino = fileino
+                totalread = 0
             totalread = totalread + self._run_file(filename=files[0],already_read=totalread);
 
     def _run_file(self,filename,already_read=0):
@@ -159,6 +165,7 @@ class logtail(object):
                 totalread = totalread + len(curread)
                 lines = curread.split("\n")
                 for line in lines:
+                    # This is where process will go.
                     print line
                 curread = os.read(fd.fileno(),self.readsize) 
             time.sleep(3) 
