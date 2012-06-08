@@ -7,14 +7,14 @@ class logtail(object):
     This class can be used to tail a file and do something when new lines appear
     in it for logging.
     """
-    def __init__(self,globstr,directory,debug,singlefile,readsize=10000):
+    def __init__(self,globstr,directory,debug,singlefile,readsize=10000,recovery_file=None):
         self._glob = globstr
         self._directory = directory
         self._singlefile = singlefile
         self._debug = debug
         self._handle_gz = True
         self._freshstart = False
-        self._data_directory = None
+        self._recovery_file = recovery_file
         self._readsize = readsize
 
     @property
@@ -44,14 +44,24 @@ class logtail(object):
     @property
     def directory(self):
         """
-        This contains the directory where we will search for ordered files matching the
-        glob in globstr.
+        The directory where we will search for matching files.
         """
         return self._directory
 
     @directory.setter
     def _set_directory(self, value):
         self._directory = value 
+
+    @property
+    def recovery_file(self):
+        """
+        The file that will remember the last file read for multifile read recovery.
+        """
+        return self._recovery_file
+
+    @directory.setter
+    def _set_recovery_file(self, value):
+        self._recovery_file = value 
 
     @property
     def singlefile(self):
@@ -100,19 +110,6 @@ class logtail(object):
     def _set_freshstart(self, value):
         self._freshstart = value
 
-    @property
-    def data_directory(self):
-        """
-        This contains information about where this class will keep information about
-        which files it has already handled.
-        """
-        return self._data_directory
-
-    @data_directory.setter
-    def _set_data_directory(self, value):
-        self._data_directory = value
-
-
     def _fileglob(self):
         """
         Returns a list of files that matches the file glob information passed in.
@@ -125,13 +122,21 @@ class logtail(object):
         """
         Starts the log tailing and takes over the process in an infinite loop.
         """
-        files = self._fileglob()
+        if ( self.debug ):
+            print "Running."
         if ( self.singlefile ):
             self._run_singlefile()
+        else:
+            (filename,readcount) = ('',0)
+            if ( self.recovery_file != None ):
+                (filename,readcount) = self._recall()
+            self._run_multifile(curfile=filename,totalread=readcount)
 
     def _run_singlefile(self):
         # For this run, we would need to check the file inode on each run, and when it
         # changes, reset the current read to zero.
+        if ( self.debug ):
+            print "Running singlefile."
         totalread = 0
         fileino = -1
         lastfileino = -1
@@ -144,6 +149,28 @@ class logtail(object):
                 lastfileino = fileino
                 totalread = 0
             totalread = totalread + self._run_file(filename=files[0],already_read=totalread);
+
+    def _run_multifile(self,curfile='',totalread=0):
+        if ( self.debug ):
+            print "Running multifile."
+        while ( 1 ):
+            files = self._fileglob()
+            if ( len(files) ):
+                if ( curfile == '' ):
+                    curfile = files[-1]
+                    totalread = 0
+                elif ( curfile != files[-1] ):
+                    idx = 0
+                    for f in files:
+                        if ( f > curfile ):
+                            break
+                        else:
+                            idx = idx + 1
+                    curfile = files[idx]
+                    totalread = 0
+                totalread = totalread + self._run_file(filename=curfile,already_read=totalread)
+            else:
+                time.sleep(3)
 
     def _run_file(self,filename,already_read=0):
         fd = open(filename)
@@ -163,12 +190,35 @@ class logtail(object):
             while ( len(curread) > 0 ):
                 passes = 0
                 totalread = totalread + len(curread)
+                self._remember(filename,totalread)
                 lines = curread.split("\n")
                 for line in lines:
                     # This is where process will go.
-                    print line
+                    self.process(line)
                 curread = os.read(fd.fileno(),self.readsize) 
             time.sleep(3) 
         if ( self.debug ):
             print "Finishing file " + filename + " with read of: " + str(totalread)
         return totalread
+
+    def _recall(self):
+        filename = ''
+        readamount = 0
+        if ( os.path.isfile(self.recovery_file) ):
+            fh = open(self.recovery_file,'r')
+            for line in fh:
+                items = line.partition(':')
+                if ( len(items[2]) ):
+                    filename = items[0]
+                    readamount = int(items[2])
+                    break
+                break
+        return ( filename , readamount )
+            
+    def _remember(self,filename,readcount):
+        fh = open(self.recovery_file,'w')
+        fh.write("{0}:{1}\n".format(filename,readcount))
+
+    def process(self,line):
+        print line
+

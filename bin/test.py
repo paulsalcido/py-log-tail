@@ -32,6 +32,13 @@ arg_parser.add_argument(
     default=False,
     help="Use when running a single rotating file (sys.log, for instance).")
 
+arg_parser.add_argument(
+    '--recovery-file','-r',
+    type=str,
+    dest="recovery_file",
+    default=None,
+    help="The file that will be used for recovery in multifile parsing.")
+
 options = arg_parser.parse_args()
 
 if options.debug == True :
@@ -42,5 +49,6 @@ if os.path.isdir(options.filedirectory) == True :
         directory=options.filedirectory,
         globstr=options.fileglob,
         debug=options.debug,
+        recovery_file=options.recovery_file,
         singlefile=options.singlefile)
     lt.run()
