@@ -187,6 +187,7 @@ class logtail(object):
             lastread = totalread
             passes = passes + 1
             curread = os.read(fd.fileno(),self.readsize)
+            remainder = ''
             while ( len(curread) > 0 ):
                 passes = 0
                 totalread = totalread + len(curread)
@@ -195,6 +196,16 @@ class logtail(object):
                 for line in lines:
                     # This is where process will go.
                     self.process(line)
+                if ( len(remainder) ):
+                    lines[0] = remainder + lines[0]
+                    remainder = ''
+                linecount = len(lines)
+                for i in range(linecount):
+                    line = lines[i]
+                    if ( i < linecount - 1 ):
+                        print line
+                    elif ( len(line) > 0 ):
+                        remainder = line
                 curread = os.read(fd.fileno(),self.readsize) 
             time.sleep(3) 
         if ( self.debug ):
