@@ -1,5 +1,4 @@
 import argparse
-import logtail
 import os
 
 arg_parser = argparse.ArgumentParser()

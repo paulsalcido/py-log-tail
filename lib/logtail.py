@@ -155,6 +155,7 @@ class logtail(object):
             print "Running multifile."
         while ( 1 ):
             files = self._fileglob()
+            skip_wait = False
             if ( len(files) ):
                 if ( curfile == '' ):
                     curfile = files[-1]
@@ -167,14 +168,17 @@ class logtail(object):
                         else:
                             idx = idx + 1
                     curfile = files[idx]
+                    if ( idx < len(files) - 1 ):
+                        skip_wait = True
                     totalread = 0
-                totalread = totalread + self._run_file(filename=curfile,already_read=totalread)
+                totalread = self._run_file(filename=curfile,already_read=totalread,skip_wait=skip_wait)
             else:
                 time.sleep(3)
 
-    def _run_file(self,filename,already_read=0):
+    def _run_file(self,filename,already_read=0,skip_wait=False):
         fd = open(filename)
-        print fd
+        if ( self.debug ):
+            print fd
         totalread = already_read
         if ( totalread > 0 ):
             os.lseek(fd.fileno(),totalread,os.SEEK_SET)
@@ -193,9 +197,6 @@ class logtail(object):
                 totalread = totalread + len(curread)
                 self._remember(filename,totalread)
                 lines = curread.split("\n")
-                for line in lines:
-                    # This is where process will go.
-                    self.process(line)
                 if ( len(remainder) ):
                     lines[0] = remainder + lines[0]
                     remainder = ''
@@ -203,11 +204,12 @@ class logtail(object):
                 for i in range(linecount):
                     line = lines[i]
                     if ( i < linecount - 1 ):
-                        print line
+                        self.process(line);
                     elif ( len(line) > 0 ):
                         remainder = line
                 curread = os.read(fd.fileno(),self.readsize) 
-            time.sleep(3) 
+            if ( not skip_wait ):
+                time.sleep(1) 
         if ( self.debug ):
             print "Finishing file " + filename + " with read of: " + str(totalread)
         return totalread
@@ -233,3 +235,59 @@ class logtail(object):
     def process(self,line):
         print line
 
+
+if __name__ == '__main__':
+    import argparse
+    import logtail
+    import os
+
+    arg_parser = argparse.ArgumentParser()
+
+    arg_parser.add_argument(
+        '--glob','-g',
+        type=str,
+        required="True",
+        dest="fileglob",
+        help="A file glob to help find files that need to be tailed.")
+
+    arg_parser.add_argument(
+        '--directory','-d',
+        type=str,
+        required="True",
+        dest="filedirectory",
+        help="The directory to search for files.")
+
+    arg_parser.add_argument(
+        '--debug','-D',
+        action="store_true",
+        dest="debug",
+        default=False,
+        help="Turn on debugging output.")
+
+    arg_parser.add_argument(
+        "--single-file",'-s',
+        action="store_true",
+        dest="singlefile",
+        default=False,
+        help="Use when running a single rotating file (sys.log, for instance).")
+
+    arg_parser.add_argument(
+        '--recovery-file','-r',
+        type=str,
+        dest="recovery_file",
+        default=None,
+        help="The file that will be used for recovery in multifile parsing.")
+
+    options = arg_parser.parse_args()
+
+    if options.debug == True :
+        print options
+
+    if os.path.isdir(options.filedirectory) == True :
+        lt = logtail.logtail(
+            directory=options.filedirectory,
+            globstr=options.fileglob,
+            debug=options.debug,
+            recovery_file=options.recovery_file,
+            singlefile=options.singlefile)
+        lt.run()
