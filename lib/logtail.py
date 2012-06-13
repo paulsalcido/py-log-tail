@@ -1,4 +1,5 @@
 import glob
+import gzip
 import os
 import time
 
@@ -151,8 +152,12 @@ class logtail(object):
             totalread = totalread + self._run_file(filename=files[0],already_read=totalread);
 
     def _run_multifile(self,curfile='',totalread=0):
+        recovery = False
         if ( self.debug ):
             print "Running multifile."
+            if ( len(curfile) > 0):
+                print "Running with recovery."
+                recovery = True
         while ( 1 ):
             files = self._fileglob()
             skip_wait = False
@@ -163,25 +168,37 @@ class logtail(object):
                 elif ( curfile != files[-1] ):
                     idx = 0
                     for f in files:
-                        if ( f > curfile ):
+                        if ( recovery and f == curfile or ( f[-3:] == '.gz' and f[:-3] == curfile ) ):
+                            recovery = False
+                            break
+                        elif ( f > curfile ):
+                            totalread = 0
                             break
                         else:
                             idx = idx + 1
                     curfile = files[idx]
                     if ( idx < len(files) - 1 ):
                         skip_wait = True
-                    totalread = 0
                 totalread = self._run_file(filename=curfile,already_read=totalread,skip_wait=skip_wait)
             else:
                 time.sleep(3)
 
     def _run_file(self,filename,already_read=0,skip_wait=False):
-        fd = open(filename)
+        fd = None
+        is_gz = False
+        if ( filename[-3:] == '.gz' ):
+            fd = gzip.open(filename,'rb')
+            is_gz = True
+        else:
+            fd = open(filename)
         if ( self.debug ):
             print fd
         totalread = already_read
         if ( totalread > 0 ):
-            os.lseek(fd.fileno(),totalread,os.SEEK_SET)
+            if ( is_gz ):
+                fd.read(totalread)
+            else:
+                os.lseek(fd.fileno(),totalread,os.SEEK_SET)
         lastread = 0
         passes = 0
         while ( passes < 3 ):
@@ -190,7 +207,11 @@ class logtail(object):
                 print "Waiting for pass: " + str(passes)
             lastread = totalread
             passes = passes + 1
-            curread = os.read(fd.fileno(),self.readsize)
+            curread = '' 
+            if ( is_gz ):
+                curread = fd.read(self.readsize)
+            else:
+                curread = os.read(fd.fileno(),self.readsize)
             remainder = ''
             while ( len(curread) > 0 ):
                 passes = 0
@@ -207,7 +228,10 @@ class logtail(object):
                         self.process(line);
                     elif ( len(line) > 0 ):
                         remainder = line
-                curread = os.read(fd.fileno(),self.readsize) 
+                if ( is_gz ):
+                    curread = fd.read(self.readsize)
+                else:
+                    curread = os.read(fd.fileno(),self.readsize) 
             if ( not skip_wait ):
                 time.sleep(1) 
         if ( self.debug ):
@@ -217,20 +241,25 @@ class logtail(object):
     def _recall(self):
         filename = ''
         readamount = 0
-        if ( os.path.isfile(self.recovery_file) ):
-            fh = open(self.recovery_file,'r')
-            for line in fh:
-                items = line.partition(':')
-                if ( len(items[2]) ):
-                    filename = items[0]
-                    readamount = int(items[2])
+        if ( self.recovery_file != None ):
+            if ( os.path.isfile(self.recovery_file) ):
+                fh = open(self.recovery_file,'r')
+                for line in fh:
+                    items = line.partition(':')
+                    if ( len(items[2]) ):
+                        filename = items[0]
+                        readamount = int(items[2])
+                        break
                     break
-                break
         return ( filename , readamount )
-            
+
     def _remember(self,filename,readcount):
-        fh = open(self.recovery_file,'w')
-        fh.write("{0}:{1}\n".format(filename,readcount))
+        if ( self.recovery_file != None ):
+            fh = open(self.recovery_file,'w')
+            mod_filename = filename
+            if ( mod_filename[-3:] == '.gz' ):
+                mod_filename = mod_filename[:-3]
+            fh.write("{0}:{1}\n".format(mod_filename,readcount))
 
     def process(self,line):
         print line
