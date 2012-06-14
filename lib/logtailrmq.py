@@ -9,6 +9,12 @@ import pika
 class logtailrmq(logtail.logtail):
     """
     This class will tail a log and push the data to rabbitmq.
+
+    A typical usage case for this file might look like:
+
+    env PYTHONPATH=$PYTHONPATH:. python logtailrmq.py --glob="auth.log" --directory="/var/log/" --rabbitmq-host=localhost --exchange-name=logtail-test-exchange --debug --single-file
+
+    And it would start piping all of the auth.log messages directly to rabbitmq.
     """
     def __init__(self,globstr,directory,debug,singlefile,rabbitmq_host,exchange_name,exchange_type,routing_key,auto_delete,readsize=10000,recovery_file=None):
         super( logtailrmq, self ).__init__(globstr=globstr,directory=directory,debug=debug,singlefile=singlefile,readsize=readsize,recovery_file=recovery_file)

@@ -8,6 +8,16 @@ class logtail(object):
     """
     This class can be used to tail a file and do something when new lines appear
     in it for logging.
+
+    A typical usage case for this file might look like:
+
+    python logtail.py --glob="auth.log" --directory="/var/log/" --single-file
+
+    For a file that doesn't rotate or:
+
+    python logtail.py --glob="apache2_access.*" --directory="/var/log/apache2/"
+
+    For something that does rotate
     """
     def __init__(self,globstr,directory,debug,singlefile,readsize=10000,recovery_file=None):
         self._glob = globstr
