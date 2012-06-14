@@ -2,6 +2,7 @@ import glob
 import gzip
 import os
 import time
+import argparse
 
 class logtail(object):
     """
@@ -26,7 +27,7 @@ class logtail(object):
         return self._readsize
 
     @readsize.setter
-    def _set_readsize(self,value):
+    def readsize(self,value):
         self._readsize = value
 
     @property
@@ -39,7 +40,7 @@ class logtail(object):
         return self._glob
 
     @globstr.setter
-    def _set_globstr(self, value):
+    def globstr(self, value):
         self._glob = value
 
     @property
@@ -50,7 +51,7 @@ class logtail(object):
         return self._directory
 
     @directory.setter
-    def _set_directory(self, value):
+    def directory(self, value):
         self._directory = value 
 
     @property
@@ -60,8 +61,8 @@ class logtail(object):
         """
         return self._recovery_file
 
-    @directory.setter
-    def _set_recovery_file(self, value):
+    @recovery_file.setter
+    def recovery_file(self, value):
         self._recovery_file = value 
 
     @property
@@ -74,7 +75,7 @@ class logtail(object):
         return self._singlefile
 
     @singlefile.setter
-    def _set_singlefile(self, value):
+    def singlefile(self, value):
         self._singlefile = value
 
     @property
@@ -83,7 +84,7 @@ class logtail(object):
         return self._debug
 
     @debug.setter
-    def _set_debug(self,value):
+    def debug(self,value):
         self._debug = value
 
     @property
@@ -95,7 +96,7 @@ class logtail(object):
         return self._handle_gz
 
     @handle_gz.setter
-    def _set_handle_gz(self, value):
+    def handle_gz(self, value):
         self._handle_gz = value
 
     @property
@@ -108,7 +109,7 @@ class logtail(object):
         return self._freshstart
 
     @freshstart.setter
-    def _set_freshstart(self, value):
+    def freshstart(self, value):
         self._freshstart = value
 
     def _fileglob(self):
@@ -145,11 +146,12 @@ class logtail(object):
             files = self._fileglob()
             if ( len(files) > 1 ):
                 ValueError("Option singlefile set and more than one file returned by glob.");
-            fileino = os.stat(files[0])[1];
-            if ( fileino != lastfileino ):
-                lastfileino = fileino
-                totalread = 0
-            totalread = totalread + self._run_file(filename=files[0],already_read=totalread);
+            elif ( len(files) == 1 ):
+                fileino = os.stat(files[0])[1];
+                if ( fileino != lastfileino ):
+                    lastfileino = fileino
+                    totalread = 0
+                totalread = self._run_file(filename=files[0],already_read=totalread);
 
     def _run_multifile(self,curfile='',totalread=0):
         recovery = False
@@ -255,6 +257,8 @@ class logtail(object):
 
     def _remember(self,filename,readcount):
         if ( self.recovery_file != None ):
+            if ( self.debug ):
+                print "Filling " + self.recovery_file
             fh = open(self.recovery_file,'w')
             mod_filename = filename
             if ( mod_filename[-3:] == '.gz' ):
@@ -262,61 +266,60 @@ class logtail(object):
             fh.write("{0}:{1}\n".format(mod_filename,readcount))
 
     def process(self,line):
+        """
+        This is a subroutine that may be overridden in subclasses to change how this class deals
+        with a line in the log file.
+        """
         print line
 
-
-if __name__ == '__main__':
-    import argparse
-    import logtail
-    import os
-
+def default_arg_parser():
+    """
+    Creates an argparse ArgumentParser for parsing the command line when this utility is run as the
+    main script.
+    """
     arg_parser = argparse.ArgumentParser()
-
     arg_parser.add_argument(
         '--glob','-g',
         type=str,
         required="True",
-        dest="fileglob",
+        dest="globstr",
         help="A file glob to help find files that need to be tailed.")
-
     arg_parser.add_argument(
         '--directory','-d',
         type=str,
         required="True",
-        dest="filedirectory",
+        dest="directory",
         help="The directory to search for files.")
-
     arg_parser.add_argument(
         '--debug','-D',
         action="store_true",
         dest="debug",
         default=False,
         help="Turn on debugging output.")
-
     arg_parser.add_argument(
         "--single-file",'-s',
         action="store_true",
         dest="singlefile",
         default=False,
         help="Use when running a single rotating file (sys.log, for instance).")
-
     arg_parser.add_argument(
         '--recovery-file','-r',
         type=str,
         dest="recovery_file",
         default=None,
         help="The file that will be used for recovery in multifile parsing.")
+    return arg_parser
 
+if __name__ == '__main__':
+    import logtail
+    import os
+
+    arg_parser = logtail.default_arg_parser()
     options = arg_parser.parse_args()
 
     if options.debug == True :
         print options
 
-    if os.path.isdir(options.filedirectory) == True :
-        lt = logtail.logtail(
-            directory=options.filedirectory,
-            globstr=options.fileglob,
-            debug=options.debug,
-            recovery_file=options.recovery_file,
-            singlefile=options.singlefile)
+    if os.path.isdir(options.directory) == True :
+        lt = logtail.logtail(**(options.__dict__))
         lt.run()
